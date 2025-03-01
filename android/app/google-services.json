@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "646494161462",
+    "project_id": "sway-90eb4",
+    "storage_bucket": "sway-90eb4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:646494161462:android:0a845eefc13f354c2fa697",
+        "android_client_info": {
+          "package_name": "com.example.sway"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxucxIgu7UTxA-zYbtvxZMLMxWZYiZ-jM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:646494161462:android:7762783fa8ee42732fa697",
+        "android_client_info": {
+          "package_name": "com.example.sway_driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAxucxIgu7UTxA-zYbtvxZMLMxWZYiZ-jM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
