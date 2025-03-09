@@ -16,6 +16,15 @@ class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _addressController = TextEditingController();
   LatLng? _selectedLocation;
 
+/////////////////////////// LIFEFE CYLE ///////////////////////////////////////////
+  @override
+  void initState() {
+    super.initState();
+    Future.delayed(Duration.zero, () {
+      _getCurrentLocation();
+    });
+  }
+
 //////////////////////////// Functions ////////////////////////////////////////////
 
   Future<void> _getAddressFromLatLng(LatLng latLng) async {
@@ -41,54 +50,78 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Lấy vị trí hiện tại và cập nhật địa chỉ
   Future<void> _getCurrentLocation() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    // Kiểm tra quyền truy cập vị trí
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
-
-    permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return;
-    }
-    if (permission == LocationPermission.deniedForever) return;
-
-    // Lấy tọa độ vị trí hiện tại
-    Position position = await Geolocator.getCurrentPosition();
-    LatLng latLng = LatLng(position.latitude, position.longitude);
-
-    setState(() {
-      _selectedLocation = latLng;
-    });
-
-    _mapController.move(latLng, 16);
-    _getAddressFromLatLng(latLng);
-  }
-
-  // Tìm kiếm vị trí theo địa chỉ nhập vào
-  Future<void> _searchLocationByAddress() async {
-    String address = _addressController.text;
-    if (address.isEmpty) return;
-
     try {
-      List<Location> locations = await locationFromAddress(address);
-      if (locations.isNotEmpty) {
-        Location location = locations.first;
-        LatLng latLng = LatLng(location.latitude, location.longitude);
+      _showLoadingDialog(context);
+      bool serviceEnabled;
+      LocationPermission permission;
 
-        setState(() {
-          _selectedLocation = latLng;
-        });
+      // Kiểm tra quyền truy cập vị trí
+      serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
 
-        _mapController.move(latLng, 16);
+      permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) return;
       }
+      if (permission == LocationPermission.deniedForever) return;
+
+      // Lấy tọa độ vị trí hiện tại
+      Position position = await Geolocator.getCurrentPosition();
+      LatLng latLng = LatLng(position.latitude, position.longitude);
+
+      setState(() {
+        _selectedLocation = latLng;
+      });
+
+      _mapController.move(latLng, 16);
+      _getAddressFromLatLng(latLng);
     } catch (e) {
-      debugPrint("Lỗi tìm vị trí: $e");
+      debugPrint("$e");
     }
+    Future.delayed(Duration(milliseconds: 500), () {
+      _hideLoadingDialog(context);
+    });
   }
 
+// Hàm hiển thị popup loading
+  void _showLoadingDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // Ngăn người dùng tắt popup khi nhấn ra ngoài
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // Chỉ chiếm không gian cần thiết
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: CircularProgressIndicator(
+                  valueColor:
+                      AlwaysStoppedAnimation<Color>(Colors.amber), // Màu vàng
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 16.0),
+                child: Text(
+                  "Đang lấy vị trí...",
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+// Hàm hiển thị popup loading
+  void _hideLoadingDialog(BuildContext context) {
+    Navigator.of(context).pop(); // Đóng popup
+  }
+
+//Layout /////////////////////////////////////////////////////
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -99,12 +132,9 @@ class _HomeScreenState extends State<HomeScreen> {
             options: MapOptions(
               initialCenter: const LatLng(10.7769, 106.7009),
               initialZoom: 13,
-              onTap: (tapPosition, point) {
-                setState(() {
-                  _selectedLocation = point;
-                });
-                _getAddressFromLatLng(point);
-              },
+              interactionOptions: const InteractionOptions(
+                flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+              ),
             ),
             children: [
               TileLayer(
@@ -118,8 +148,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       point: _selectedLocation!,
                       width: 30,
                       height: 30,
-                      child: const Icon(Icons.location_pin,
-                          color: Colors.amber, size: 30),
+                      child: const Icon(Icons.location_history,
+                          color: Colors.amber, size: 50),
                     ),
                   ],
                 ),
@@ -155,7 +185,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Column(
                         children: [
                           Icon(Icons.check_circle,
-                              color: const Color.fromARGB(255, 255, 255, 255), size: 24),
+                              color: const Color.fromARGB(255, 255, 255, 255),
+                              size: 24),
                           SizedBox(height: 4),
                           Text(
                             '95%',
@@ -164,13 +195,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           SizedBox(height: 4),
                           Text(
                             'Tỷ lệ hoàn thành',
-                            style: TextStyle(color:  Color.fromARGB(255, 147, 146, 146), fontSize: 12),
+                            style: TextStyle(
+                                color: Color.fromARGB(255, 147, 146, 146),
+                                fontSize: 12),
                           ),
                         ],
                       ),
                       Column(
                         children: [
-                          Icon(Icons.cancel, color: const Color.fromARGB(255, 255, 255, 255), size: 24),
+                          Icon(Icons.cancel,
+                              color: const Color.fromARGB(255, 255, 255, 255),
+                              size: 24),
                           SizedBox(height: 4),
                           Text(
                             '5%',
@@ -179,7 +214,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           SizedBox(height: 4),
                           Text(
                             'Tỷ lệ hủy',
-                            style: TextStyle(color:  Color.fromARGB(255, 147, 146, 146), fontSize: 12),
+                            style: TextStyle(
+                                color: Color.fromARGB(255, 147, 146, 146),
+                                fontSize: 12),
                           ),
                         ],
                       ),
@@ -193,7 +230,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Column(
                         children: [
                           Icon(Icons.monetization_on,
-                              color: const Color.fromARGB(255, 255, 255, 255), size: 24),
+                              color: const Color.fromARGB(255, 255, 255, 255),
+                              size: 24),
                           SizedBox(height: 4),
                           Text(
                             '10,000,000 VND',
@@ -202,7 +240,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           SizedBox(height: 4),
                           Text(
                             'Doanh thu',
-                            style: TextStyle(color: const Color.fromARGB(255, 147, 146, 146), fontSize: 12),
+                            style: TextStyle(
+                                color: const Color.fromARGB(255, 147, 146, 146),
+                                fontSize: 12),
                           ),
                         ],
                       ),

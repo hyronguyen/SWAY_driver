@@ -1,12 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:sway_driver/page/default.dart';
 import 'package:sway_driver/page/home.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
-
 
 class DriverMainpage extends StatefulWidget {
   const DriverMainpage({super.key});
@@ -16,13 +15,22 @@ class DriverMainpage extends StatefulWidget {
 }
 
 class _DriverMainpageState extends State<DriverMainpage> {
-  //////////////////////////// Biến cục bộ ////////////////////////////////////////////
+  //////////////////////////// LOCAL VARIBLE ////////////////////////////////////////////
 
   bool isTracking = false; // Trạng thái theo dõi vị trí
-  String driverId = "taxe123456"; // ID tài xế (Lấy từ Drawer)
+  String? driverId = "null";
+  String? driverVehicle = "null"; // ID tài xế (Lấy từ Drawer)
   StreamSubscription<Position>? positionSubscription; // Quản lý stream vị trí
-
   int _selectedIndex = 0;
+
+
+///////////////////////////// Life Cycle /////////////////////////////////////////////
+@override
+  void initState() {
+    super.initState();
+    getDriverInfo();
+
+  }
 
 //////////////////////////// Functions ////////////////////////////////////////////
 
@@ -37,7 +45,8 @@ class _DriverMainpageState extends State<DriverMainpage> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.deniedForever) {
-          debugPrint("_toggleTracking: 🚫 Quyền truy cập vị trí bị từ chối vĩnh viễn!");
+          debugPrint(
+              "_toggleTracking: 🚫 Quyền truy cập vị trí bị từ chối vĩnh viễn!");
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Quyền truy cập vị trí bị từ chối!")),
           );
@@ -57,10 +66,9 @@ class _DriverMainpageState extends State<DriverMainpage> {
       positionSubscription = Geolocator.getPositionStream(
         locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
       ).listen((Position position) async {
-        
         LatLng latLng = LatLng(position.latitude, position.longitude);
         debugPrint("📌 Nhận vị trí mới: ${latLng}");
-   
+
         try {
           await FirebaseFirestore.instance
               .collection('AVAILABLE_DRIVERS')
@@ -70,6 +78,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
             'longitude': position.longitude,
             'status': "available",
             'timestamp': FieldValue.serverTimestamp(),
+            'vehicle': driverVehicle,
           }, SetOptions(merge: true));
 
           debugPrint("✅ Cập nhật Firestore thành công!");
@@ -110,6 +119,23 @@ class _DriverMainpageState extends State<DriverMainpage> {
     setState(() {
       _selectedIndex = index;
     });
+  }
+
+  // hàm lấy thông tin tài xế từ SharedPreference
+  Future<void> getDriverInfo() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+
+       setState(() {
+        driverId = prefs.getString("driver_id") ?? "driver_id_test";
+        driverVehicle = prefs.getString("driver_vehicle") ?? "xemay";
+      });
+
+      debugPrint("🚗 Driver ID: $driverId");
+      debugPrint("🛵 Vehicle Type: $driverVehicle");
+    } catch (e) {
+      debugPrint("Lỗi $e");
+    }
   }
 
   // Hàm này trả về tên cho AppBar title và widget tương ứng
@@ -212,12 +238,12 @@ class _DriverMainpageState extends State<DriverMainpage> {
             padding: EdgeInsets.zero,
             children: [
               DrawerHeader(
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: Color(0xFF1F212A), // Màu nền của DrawerHeader,
                   border: Border(bottom: BorderSide(width: 0)),
                 ),
                 child: Column(
-                  children: const [
+                  children: [
                     CircleAvatar(
                       radius: 40,
                       backgroundImage: NetworkImage(
@@ -228,7 +254,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
                     Text('Nguyễn Hồ Ngọc Huy',
                         style: TextStyle(color: Colors.white)),
                     // Hiển thị ID tài xế
-                    Text("taxe123456", style: TextStyle(color: Colors.white)),
+                    Text("$driverId", style: TextStyle(color: Colors.white)),
                   ],
                 ),
               ),
