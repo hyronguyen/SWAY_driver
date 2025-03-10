@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 //////////////////////////// Functions ////////////////////////////////////////////
 
+  // Hàm lấy chuyển latlng thành địa chỉ string
   Future<void> _getAddressFromLatLng(LatLng latLng) async {
     try {
       List<Placemark> placemarks =
@@ -84,7 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-// Hàm hiển thị popup loading
+  // Hàm hiển thị popup loading
   void _showLoadingDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -116,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-// Hàm hiển thị popup loading
+  // Hàm hiển thị popup loading
   void _hideLoadingDialog(BuildContext context) {
     Navigator.of(context).pop(); // Đóng popup
   }

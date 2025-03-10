@@ -2,8 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:sway_driver/config/colors.dart';
 import 'package:sway_driver/page/default.dart';
-import 'package:sway_driver/page/home.dart';
+import 'package:sway_driver/page/home_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
 
@@ -21,20 +22,18 @@ class _DriverMainpageState extends State<DriverMainpage> {
   String? driverId = "null";
   String? driverVehicle = "null"; // ID tài xế (Lấy từ Drawer)
   StreamSubscription<Position>? positionSubscription; // Quản lý stream vị trí
+  StreamSubscription<QuerySnapshot>? rideRequestSubscription;
   int _selectedIndex = 0;
 
-
 ///////////////////////////// Life Cycle /////////////////////////////////////////////
-@override
+  @override
   void initState() {
     super.initState();
     getDriverInfo();
-
   }
 
 //////////////////////////// Functions ////////////////////////////////////////////
 
-  // Hàm bật chức năng nhận cuốc xe
   void _toggleTracking() async {
     debugPrint("_toggleTracking: ⚡ Bắt đầu toggle tracking...");
 
@@ -56,20 +55,96 @@ class _DriverMainpageState extends State<DriverMainpage> {
 
       debugPrint("✅ Quyền truy cập vị trí được cấp!");
 
-      // Bắt đầu theo dõi vị trí
       setState(() {
         isTracking = true;
       });
 
-      debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
+      // 🔥 Bắt đầu theo dõi vị trí của tài xế
+      _startListeningLocation();
 
-      positionSubscription = Geolocator.getPositionStream(
-        locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
-      ).listen((Position position) async {
-        LatLng latLng = LatLng(position.latitude, position.longitude);
-        debugPrint("📌 Nhận vị trí mới: ${latLng}");
+      // 🔥 Khi bật tracking, bắt đầu lắng nghe yêu cầu cuốc xe
+      _listenForRideRequests();
+    } else {
+      debugPrint("🛑 Dừng theo dõi vị trí...");
 
-        try {
+      setState(() {
+        isTracking = false;
+      });
+
+      positionSubscription?.cancel();
+      positionSubscription = null;
+
+      try {
+        await FirebaseFirestore.instance
+            .collection('AVAILABLE_DRIVERS')
+            .doc(driverId)
+            .delete();
+        debugPrint("🗑️ Tài xế đã bị xóa khỏi Firestore.");
+      } catch (e) {
+        debugPrint("🔥 Lỗi khi xóa tài xế khỏi Firestore: $e");
+      }
+      debugPrint("🚫 Đã hủy lắng nghe vị trí.");
+
+      // 🔥 Khi tắt tracking, dừng lắng nghe yêu cầu cuốc xe
+      rideRequestSubscription?.cancel();
+      rideRequestSubscription = null;
+      debugPrint("🚫 Đã hủy chế độ nhận cuốc.");
+    }
+  }
+
+  // Bắt đầu theo dõi vị trí
+  void _startListeningLocation() {
+    debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
+
+    positionSubscription = Geolocator.getPositionStream(
+      locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
+    ).listen((Position position) async {
+      LatLng latLng = LatLng(position.latitude, position.longitude);
+      debugPrint("📌 Nhận vị trí mới: ${latLng}");
+
+      try {
+        DocumentSnapshot driverDoc = await FirebaseFirestore.instance
+            .collection('AVAILABLE_DRIVERS')
+            .doc(driverId)
+            .get();
+
+        if (driverDoc.exists) {
+          Map<String, dynamic>? driverData =
+              driverDoc.data() as Map<String, dynamic>?;
+
+          if (driverData != null &&
+              (driverData['status'] == "pending" ||
+                  driverData['status'] == "serving")) {
+            // Nếu tài xế đang có trạng thái "pending" hoặc "serving", chỉ cập nhật vị trí và thông tin khác
+            await FirebaseFirestore.instance
+                .collection('AVAILABLE_DRIVERS')
+                .doc(driverId)
+                .set({
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'timestamp': FieldValue.serverTimestamp(),
+              'vehicle': driverVehicle,
+            }, SetOptions(merge: true));
+
+            debugPrint(
+                "✅ Cập nhật vị trí thành công, giữ nguyên trạng thái '${driverData['status']}'!");
+          } else {
+            // Nếu trạng thái không phải "pending" hoặc "serving", cập nhật toàn bộ
+            await FirebaseFirestore.instance
+                .collection('AVAILABLE_DRIVERS')
+                .doc(driverId)
+                .set({
+              'latitude': position.latitude,
+              'longitude': position.longitude,
+              'status': "available",
+              'timestamp': FieldValue.serverTimestamp(),
+              'vehicle': driverVehicle,
+            }, SetOptions(merge: true));
+
+            debugPrint("✅ Cập nhật Firestore thành công!");
+          }
+        } else {
+          // Nếu tài xế chưa tồn tại trong Firestore, tạo mới với trạng thái "available"
           await FirebaseFirestore.instance
               .collection('AVAILABLE_DRIVERS')
               .doc(driverId)
@@ -79,38 +154,245 @@ class _DriverMainpageState extends State<DriverMainpage> {
             'status': "available",
             'timestamp': FieldValue.serverTimestamp(),
             'vehicle': driverVehicle,
-          }, SetOptions(merge: true));
+          });
 
-          debugPrint("✅ Cập nhật Firestore thành công!");
-        } catch (e) {
-          debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+          debugPrint(
+              "✅ Tài xế chưa tồn tại, đã thêm mới với trạng thái 'available'!");
         }
-      }, onError: (error) {
-        debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
-      });
-    } else {
-      debugPrint("🛑 Dừng theo dõi vị trí...");
+      } catch (e) {
+        debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+      }
+    }, onError: (error) {
+      debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
+    });
+  }
 
-      setState(() {
-        isTracking = false;
-      });
+  // Hàm lắng nghe yêu cầu nhận cuốc
+  void _listenForRideRequests() {
+    debugPrint("🎧 Bắt đầu lắng nghe yêu cầu đặt xe...");
 
-      // Hủy lắng nghe vị trí để dừng cập nhật Firestore
-      await positionSubscription?.cancel();
-      positionSubscription = null;
-      debugPrint("🚫 Đã hủy lắng nghe vị trí.");
+    rideRequestSubscription = FirebaseFirestore.instance
+        .collection('RIDE_REQUESTS')
+        .where('driver_id', isEqualTo: driverId)
+        .where('request_status',
+            isEqualTo: 'pending') // Chỉ lấy yêu cầu đang chờ xử lý
+        .snapshots()
+        .listen((snapshot) async {
+      if (snapshot.docs.isNotEmpty) {
+        var rideData = snapshot.docs.first;
+        // Cập nhật trạng thái của tài xế thành "pending" trước khi hiển thị hộp thoại
+        try {
+          await FirebaseFirestore.instance
+              .collection('AVAILABLE_DRIVERS')
+              .doc(driverId)
+              .update({'status': 'pending'});
 
-      // Xóa tài xế khỏi Firestore
-      try {
+          debugPrint("✅ Đã cập nhật trạng thái tài xế thành 'pending'");
+
+          // Hiển thị hộp thoại yêu cầu cuốc xe
+          _showRideRequestDialog(rideData);
+        } catch (e) {
+          debugPrint("🔥 Lỗi khi cập nhật trạng thái tài xế: $e");
+        }
+      }
+    }, onError: (error) {
+      debugPrint("🔥 Lỗi khi lắng nghe yêu cầu đặt xe: $error");
+    });
+  }
+
+  // Hàm show popup khi nhận cuốc
+  void _showRideRequestDialog(QueryDocumentSnapshot rideData) {
+    Map<String, dynamic> rideInfo = rideData.data() as Map<String, dynamic>;
+    double totalFare = (rideInfo['fare'] ?? 0) + (rideInfo['weather_fee'] ?? 0);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          contentPadding: EdgeInsets.zero,
+          content: Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              color: backgroundblack,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Tổng tiền hiển thị nổi bật
+                Text(
+                  "Giá cuốc: ${totalFare.toStringAsFixed(0)} đ",
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: primary,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Divider(),
+
+                // Card chứa thông tin điểm đón & điểm đến
+                Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 4,
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text("📍 Điểm đón:",
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(rideInfo['pickup_address'] ?? "Không có dữ liệu"),
+                        SizedBox(height: 6),
+                        Text("📍 Điểm đến:",
+                            style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(rideInfo['destination_address'] ??
+                            "Không có dữ liệu"),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 10),
+
+                // Card chứa thông tin chi tiết về chuyến đi
+                Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  elevation: 4,
+                  child: Padding(
+                    padding: EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildInfoRow("🚗 Loại xe:", rideInfo['vehicle_type']),
+                        _buildInfoRow("🌦️ Phụ phí thời tiết:",
+                            "${rideInfo['weather_fee']} đ"),
+                        _buildInfoRow(
+                            "💳 Thanh toán:", rideInfo['payment_method']),
+                        _buildInfoRow("⏳ Thời gian:",
+                            rideInfo['timestamp'].toDate().toString()),
+                      ],
+                    ),
+                  ),
+                ),
+
+                SizedBox(height: 16),
+
+                // Nút hành động
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    ElevatedButton(
+                      onPressed: () {
+                        _processRequest(rideData.id, "denied");
+                        Navigator.of(context).pop();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: myorange,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      child: Text("Hủy",
+                          style: TextStyle(fontSize: 16, color: Colors.white)),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        _processRequest(rideData.id, "accepted");
+                        Navigator.of(context).pop();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primary,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      child: Text("Nhận cuốc",
+                          style: TextStyle(fontSize: 16, color: backgroundblack)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // HÀM XỬ LÝ YÊU CẦU
+  void _processRequest(String rideId, String status) async {
+    try {
+      if (status == 'denied') {
+        // 🔴 Nếu tài xế từ chối cuốc xe
+        await FirebaseFirestore.instance
+            .collection('RIDE_REQUESTS')
+            .doc(rideId)
+            .update({'request_status': 'denied'});
+
         await FirebaseFirestore.instance
             .collection('AVAILABLE_DRIVERS')
             .doc(driverId)
-            .delete();
+            .update({'status': 'available'});
 
-        debugPrint("🗑️ Tài xế đã bị xóa khỏi Firestore.");
-      } catch (e) {
-        debugPrint("🔥 Lỗi khi xóa tài xế khỏi Firestore: $e");
+        debugPrint(
+            "🚖 Cuốc xe bị từ chối! ✅ Đã cập nhật trạng thái tài xế thành 'available'");
+      } else if (status == 'accepted') {
+        // 🟢 Nếu tài xế chấp nhận cuốc xe, cập nhật trạng thái ride request
+        await FirebaseFirestore.instance
+            .collection('RIDE_REQUESTS')
+            .doc(rideId)
+            .update({'request_status': 'accepted'});
+
+        await FirebaseFirestore.instance
+            .collection('AVAILABLE_DRIVERS')
+            .doc(driverId)
+            .update({'status': 'serving'});
+
+        debugPrint(
+            "🚖 Cuốc xe được chấp nhận! ✅ Đã cập nhật trạng thái tài xế thành 'serving'");
+
+        // 🔄 Lấy thông tin từ RIDE_REQUESTS để lưu vào TRACKING_TRIP
+        DocumentSnapshot rideDoc = await FirebaseFirestore.instance
+            .collection('RIDE_REQUESTS')
+            .doc(rideId)
+            .get();
+
+        if (rideDoc.exists) {
+          Map<String, dynamic> rideData =
+              rideDoc.data() as Map<String, dynamic>;
+
+          // ✅ Xóa các trường không cần thiết
+          rideData.remove('request_status');
+          rideData.remove('vehicle_type');
+          rideData.remove('weather_condition');
+          rideData.remove('weather_fee');
+          rideData.remove('payment_method');
+          rideData.remove('fare');
+
+          // ✅ Tạo một bản ghi mới trong TRACKING_TRIP
+          await FirebaseFirestore.instance
+              .collection('TRACKING_TRIP')
+              .doc(rideId)
+              .set({
+            ...rideData, // Sao chép thông tin còn lại
+            'driver_id': driverId, // Gán thêm ID của tài xế
+            'tracking_status': 'pickingup', // Trạng thái mới của cuốc xe
+            'timestamp': FieldValue.serverTimestamp(), // Ghi thời gian
+          });
+
+          debugPrint("📌 Đã tạo bản ghi TRACKING_TRIP thành công!");
+        } else {
+          debugPrint("⚠️ Không tìm thấy cuốc xe trong RIDE_REQUESTS!");
+        }
+      } else {
+        debugPrint("⚠️ Trạng thái không hợp lệ: $status");
       }
+    } catch (e) {
+      debugPrint("🔥 Lỗi khi xử lý cuốc xe: $e");
     }
   }
 
@@ -126,7 +408,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
 
-       setState(() {
+      setState(() {
         driverId = prefs.getString("driver_id") ?? "driver_id_test";
         driverVehicle = prefs.getString("driver_vehicle") ?? "xemay";
       });
@@ -378,6 +660,23 @@ class _DriverMainpageState extends State<DriverMainpage> {
         ),
       ),
       body: _loadWidget(_selectedIndex),
+    );
+  }
+
+// Widget ///////////////////////////////////////////////////////////////////////
+  // Widget hiển thị mỗi dòng thông tin
+  Widget _buildInfoRow(String title, dynamic value) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(title, style: TextStyle(fontWeight: FontWeight.bold)),
+          SizedBox(width: 8),
+          Expanded(
+              child: Text(value.toString(),
+                  style: TextStyle(color: Colors.white))),
+        ],
+      ),
     );
   }
 }
