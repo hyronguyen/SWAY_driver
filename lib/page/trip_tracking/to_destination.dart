@@ -10,7 +10,6 @@ import 'package:sway_driver/config/colors.dart';
 import 'package:http/http.dart' as http;
 import 'package:sway_driver/page/wallet/done.dart';
 
-
 class ToDestinationPage extends StatefulWidget {
   // ATTRIBUTES/////////////////////////////////////////////////////////////////////////////////////////////////////////
   final String trackingTripId;
@@ -32,14 +31,14 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   LatLng? pickupLocation;
   LatLng? destinationLocation;
   StreamSubscription<DocumentSnapshot>? driverLocationSubscription;
-
-
   List<LatLng> routePoints = [];
   final MapController _mapController = MapController();
   final String mapBoxToken =
       'pk.eyJ1IjoiaG90aGFuaGdpYW5nOSIsImEiOiJjbTd6azNwbmYwazQ5MmxzZm10cmJ2OHplIn0.FnRAAi3J7jVs4FxUhd1KAA';
   bool isDriverAtDes = false; // Biến kiểm soát trạng thái nút
   Timer? autoConfirmTimer; // Timer để xác nhận tự động
+  int countdown = 20;
+  Timer? countdownTimer;
 
 // LIFE CYCLE /////////////////////////////////////////////////////////////////////////////////////////////////////////
   @override
@@ -53,7 +52,7 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
 
   @override
   void dispose() {
-     // Hủy Timer khi widget bị huỷ
+    // Hủy Timer khi widget bị huỷ
     super.dispose();
   }
 
@@ -148,31 +147,31 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
 
   // Theo dõi vị trí tài xế
   void _listenToDriverLocation() {
-  driverLocationSubscription = FirebaseFirestore.instance
-      .collection('AVAILABLE_DRIVERS')
-      .doc(widget.driverID)
-      .snapshots()
-      .listen((snapshot) async {
-    if (snapshot.exists) {
-      var data = snapshot.data();
-      if (data != null &&
-          data['latitude'] != null &&
-          data['longitude'] != null) {
-        LatLng newLocation = LatLng(data['latitude'], data['longitude']);
+    driverLocationSubscription = FirebaseFirestore.instance
+        .collection('AVAILABLE_DRIVERS')
+        .doc(widget.driverID)
+        .snapshots()
+        .listen((snapshot) async {
+      if (snapshot.exists) {
+        var data = snapshot.data();
+        if (data != null &&
+            data['latitude'] != null &&
+            data['longitude'] != null) {
+          LatLng newLocation = LatLng(data['latitude'], data['longitude']);
 
-        setState(() {
-          driverLocation = newLocation;
-        });
+          setState(() {
+            driverLocation = newLocation;
+          });
 
-        Move(newLocation);
-        _drawRoute(); // Gọi hàm vẽ đường
+          Move(newLocation);
+          _drawRoute(); // Gọi hàm vẽ đường
 
-        // Kiểm tra tài xế có đến gần điểm đón không
-        Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+          // Kiểm tra tài xế có đến gần điểm đón không
+          Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+        }
       }
-    }
-  });
-}
+    });
+  }
 
 // Kiểm tra tài xế có trong bán kính 20m của điểm đón không
   void _checkDriverProximity() {
@@ -183,7 +182,8 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
         destination['latitude'] == null ||
         destination['longitude'] == null) return;
 
-    LatLng destinationLocation = LatLng(destination['latitude'], destination['longitude']);
+    LatLng destinationLocation =
+        LatLng(destination['latitude'], destination['longitude']);
 
     double distance = Geolocator.distanceBetween(
       driverLocation!.latitude,
@@ -200,12 +200,26 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
         isDriverAtDes = true;
       });
 
+      countdownTimer?.cancel();
+      countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+        if (countdown > 0) 
+        {
+          if(!mounted) return;
+          setState(() {
+            countdown--;
+          });
+        } else {
+          timer.cancel(); // Dừng đếm khi hết thời gian
+        }
+      });
+
       // Tự động xác nhận nếu tài xế không bấm nút sau 20 giây
       autoConfirmTimer?.cancel(); // Hủy timer cũ (nếu có)
-      
+
       autoConfirmTimer = Timer(Duration(seconds: 20), () {
         if (isDriverAtDes) {
           debugPrint("⌛ hoàn thành cuốc xe (tự động xác nhận sau 20s)");
+          _confirmDone();
         }
       });
     }
@@ -213,33 +227,33 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
 
   // Xác nhận tài xế đã đón khách
   void _confirmDone() async {
-  debugPrint("Hoàn thành cuốc xe (tài xế bấm nút)");
+    debugPrint("Hoàn thành cuốc xe (tài xế bấm nút)");
 
-  // Hủy tất cả các sự kiện lắng nghe
-  _disposeListeners();
+    // Hủy tất cả các sự kiện lắng nghe
+    _disposeListeners();
 
-  // Cập nhật trạng thái của TRACKING_TRIP trên Firestore
-  await FirebaseFirestore.instance
-      .collection('TRACKING_TRIP')
-      .doc(widget.trackingTripId)
-      .update({'tracking_status': 'done'}).then((_) {
-    debugPrint("🚀 Cập nhật tracking_status thành công!");
-  }).catchError((error) {
-    debugPrint("❌ Lỗi khi cập nhật tracking_status: $error");
-  });
+    // Cập nhật trạng thái của TRACKING_TRIP trên Firestore
+    await FirebaseFirestore.instance
+        .collection('TRACKING_TRIP')
+        .doc(widget.trackingTripId)
+        .update({'tracking_status': 'done'}).then((_) {
+      debugPrint("🚀 Cập nhật tracking_status thành công!");
+    }).catchError((error) {
+      debugPrint("❌ Lỗi khi cập nhật tracking_status: $error");
+    });
 
-  // Chuyển sang màn hình ToDestinationPage
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => DonePage(tripId: widget.trackingTripId,)
-    ),
-  );
+    // Chuyển sang màn hình ToDestinationPage
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+          builder: (context) => DonePage(
+                tripId: widget.trackingTripId,
+              )),
+    );
 
-  // Hủy tự động xác nhận nếu tài xế bấm nút trước
-  autoConfirmTimer?.cancel();
-}
-
+    // Hủy tự động xác nhận nếu tài xế bấm nút trước
+    autoConfirmTimer?.cancel();
+  }
 
   // Di chuyển bản đồ theo tài xế
   void Move(LatLng newLocation) {
@@ -248,15 +262,15 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   }
 
   /// Hủy tất cả sự kiện lắng nghe
-void _disposeListeners() {
-  autoConfirmTimer?.cancel(); // Hủy Timer nếu có
+  void _disposeListeners() {
+    autoConfirmTimer?.cancel(); // Hủy Timer nếu có
 
-  // Hủy lắng nghe vị trí tài xế
-  driverLocationSubscription?.cancel();
-  driverLocationSubscription = null;
+    // Hủy lắng nghe vị trí tài xế
+    driverLocationSubscription?.cancel();
+    driverLocationSubscription = null;
 
-  debugPrint("🛑 Đã hủy tất cả sự kiện lắng nghe!");
-}
+    debugPrint("🛑 Đã hủy tất cả sự kiện lắng nghe!");
+  }
 
 // LAYOUT //////////////////////////////////////////////
   @override
@@ -377,8 +391,6 @@ void _disposeListeners() {
                     child: Column(
                       mainAxisSize: MainAxisSize.min, // Giúp tránh overflow
                       children: [
-                  
-
                         SizedBox(height: 10),
 
                         // Nút "Đã xác nhận" đón khách
@@ -398,7 +410,9 @@ void _disposeListeners() {
                               ),
                             ),
                             child: Text(
-                              "Hoàn thành cuốc",
+                              isDriverAtDes
+                                  ? "Hoàn thành cuốc (${countdown}s)"
+                                  : "Hoàn thành cuốc",
                               style: TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.bold),
                             ),

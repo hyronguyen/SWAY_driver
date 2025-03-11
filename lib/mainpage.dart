@@ -1,3 +1,4 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -26,6 +27,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
   StreamSubscription<Position>? positionSubscription; // Quản lý stream vị trí
   StreamSubscription<QuerySnapshot>? rideRequestSubscription;
   int _selectedIndex = 0;
+  AudioPlayer audioplayer = AudioPlayer();
 
 ///////////////////////////// Life Cycle /////////////////////////////////////////////
   @override
@@ -223,7 +225,12 @@ class _DriverMainpageState extends State<DriverMainpage> {
   }
 
   // Hàm show popup khi nhận cuốc
-  void _showRideRequestDialog(QueryDocumentSnapshot rideData) {
+  Future<void> _showRideRequestDialog(QueryDocumentSnapshot rideData) async {
+    audioplayer.setVolume(1.0); // Đảm bảo âm lượng tối đa
+    await audioplayer.play(AssetSource('audio/thongbao_cocuoc.mp3'));
+    
+     // Đợi 1-2 giây để âm thanh kịp phát trước khi mở Dialog
+   await Future.delayed(Duration(seconds: 2));
     Map<String, dynamic> rideInfo = rideData.data() as Map<String, dynamic>;
     double totalFare = (rideInfo['fare'] ?? 0) + (rideInfo['weather_fee'] ?? 0);
 

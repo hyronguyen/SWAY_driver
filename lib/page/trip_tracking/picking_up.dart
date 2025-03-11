@@ -31,14 +31,14 @@ class _PickingUpPageState extends State<PickingUpPage> {
   LatLng? pickupLocation;
   LatLng? destinationLocation;
   StreamSubscription<DocumentSnapshot>? driverLocationSubscription;
-
-
+  int countdown = 20;
   List<LatLng> routePoints = [];
   final MapController _mapController = MapController();
   final String mapBoxToken =
       'pk.eyJ1IjoiaG90aGFuaGdpYW5nOSIsImEiOiJjbTd6azNwbmYwazQ5MmxzZm10cmJ2OHplIn0.FnRAAi3J7jVs4FxUhd1KAA';
   bool isDriverAtPickup = false; // Biến kiểm soát trạng thái nút
   Timer? autoConfirmTimer; // Timer để xác nhận tự động
+  Timer? countdownTimer;
 
 // LIFE CYCLE /////////////////////////////////////////////////////////////////////////////////////////////////////////
   @override
@@ -52,7 +52,7 @@ class _PickingUpPageState extends State<PickingUpPage> {
 
   @override
   void dispose() {
-     // Hủy Timer khi widget bị huỷ
+    // Hủy Timer khi widget bị huỷ
     super.dispose();
   }
 
@@ -147,31 +147,31 @@ class _PickingUpPageState extends State<PickingUpPage> {
 
   // Theo dõi vị trí tài xế
   void _listenToDriverLocation() {
-  driverLocationSubscription = FirebaseFirestore.instance
-      .collection('AVAILABLE_DRIVERS')
-      .doc(widget.driverID)
-      .snapshots()
-      .listen((snapshot) async {
-    if (snapshot.exists) {
-      var data = snapshot.data();
-      if (data != null &&
-          data['latitude'] != null &&
-          data['longitude'] != null) {
-        LatLng newLocation = LatLng(data['latitude'], data['longitude']);
+    driverLocationSubscription = FirebaseFirestore.instance
+        .collection('AVAILABLE_DRIVERS')
+        .doc(widget.driverID)
+        .snapshots()
+        .listen((snapshot) async {
+      if (snapshot.exists) {
+        var data = snapshot.data();
+        if (data != null &&
+            data['latitude'] != null &&
+            data['longitude'] != null) {
+          LatLng newLocation = LatLng(data['latitude'], data['longitude']);
 
-        setState(() {
-          driverLocation = newLocation;
-        });
+          setState(() {
+            driverLocation = newLocation;
+          });
 
-        Move(newLocation);
-        _drawRoute(); // Gọi hàm vẽ đường
+          Move(newLocation);
+          _drawRoute(); // Gọi hàm vẽ đường
 
-        // Kiểm tra tài xế có đến gần điểm đón không
-        Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+          // Kiểm tra tài xế có đến gần điểm đón không
+          Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+        }
       }
-    }
-  });
-}
+    });
+  }
 
 // Kiểm tra tài xế có trong bán kính 20m của điểm đón không
   void _checkDriverProximity() {
@@ -195,8 +195,20 @@ class _PickingUpPageState extends State<PickingUpPage> {
 
     if (distance <= 50 && !isDriverAtPickup) {
       debugPrint("🚖 Tài xế đã đến điểm đón!");
+
       setState(() {
         isDriverAtPickup = true;
+      });
+
+      countdownTimer?.cancel();
+      countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+        if (countdown > 0) {
+          setState(() {
+            countdown--;
+          });
+        } else {
+          timer.cancel(); // Dừng đếm khi hết thời gian
+        }
       });
 
       // Tự động xác nhận nếu tài xế không bấm nút sau 20 giây
@@ -204,6 +216,7 @@ class _PickingUpPageState extends State<PickingUpPage> {
       autoConfirmTimer = Timer(Duration(seconds: 20), () {
         if (isDriverAtPickup) {
           debugPrint("⌛ Khách đã lên xe (tự động xác nhận sau 20s)");
+          _confirmPickup();
         }
       });
     }
@@ -211,36 +224,35 @@ class _PickingUpPageState extends State<PickingUpPage> {
 
   // Xác nhận tài xế đã đón khách
   void _confirmPickup() async {
-  debugPrint("✅ Khách đã lên xe (tài xế bấm nút)");
+    debugPrint("✅ Khách đã lên xe (tài xế bấm nút)");
 
-  // Hủy tất cả các sự kiện lắng nghe
-  _disposeListeners();
+    // Hủy tất cả các sự kiện lắng nghe
+    _disposeListeners();
 
-  // Cập nhật trạng thái của TRACKING_TRIP trên Firestore
-  await FirebaseFirestore.instance
-      .collection('TRACKING_TRIP')
-      .doc(widget.trackingTripId)
-      .update({'tracking_status': 'goingtodes'}).then((_) {
-    debugPrint("🚀 Cập nhật tracking_status thành công!");
-  }).catchError((error) {
-    debugPrint("❌ Lỗi khi cập nhật tracking_status: $error");
-  });
+    // Cập nhật trạng thái của TRACKING_TRIP trên Firestore
+    await FirebaseFirestore.instance
+        .collection('TRACKING_TRIP')
+        .doc(widget.trackingTripId)
+        .update({'tracking_status': 'goingtodes'}).then((_) {
+      debugPrint("🚀 Cập nhật tracking_status thành công!");
+    }).catchError((error) {
+      debugPrint("❌ Lỗi khi cập nhật tracking_status: $error");
+    });
 
-  // Chuyển sang màn hình ToDestinationPage
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (context) => ToDestinationPage(
-        trackingTripId: widget.trackingTripId,
-        driverID: widget.driverID ?? '',
+    // Chuyển sang màn hình ToDestinationPage
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ToDestinationPage(
+          trackingTripId: widget.trackingTripId,
+          driverID: widget.driverID ?? '',
+        ),
       ),
-    ),
-  );
+    );
 
-  // Hủy tự động xác nhận nếu tài xế bấm nút trước
-  autoConfirmTimer?.cancel();
-}
-
+    // Hủy tự động xác nhận nếu tài xế bấm nút trước
+    autoConfirmTimer?.cancel();
+  }
 
   // Di chuyển bản đồ theo tài xế
   void Move(LatLng newLocation) {
@@ -249,22 +261,22 @@ class _PickingUpPageState extends State<PickingUpPage> {
   }
 
   /// Hủy tất cả sự kiện lắng nghe
-void _disposeListeners() {
-  autoConfirmTimer?.cancel(); // Hủy Timer nếu có
+  void _disposeListeners() {
+    autoConfirmTimer?.cancel(); // Hủy Timer nếu có
 
-  // Hủy lắng nghe vị trí tài xế
-  driverLocationSubscription?.cancel();
-  driverLocationSubscription = null;
+    // Hủy lắng nghe vị trí tài xế
+    driverLocationSubscription?.cancel();
+    driverLocationSubscription = null;
 
-  debugPrint("🛑 Đã hủy tất cả sự kiện lắng nghe!");
-}
+    debugPrint("🛑 Đã hủy tất cả sự kiện lắng nghe!");
+  }
 
 // LAYOUT //////////////////////////////////////////////
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-         title: Text("VUI LÒNG ĐÓN KHÁCH"),
+        title: Text("VUI LÒNG ĐÓN KHÁCH"),
         automaticallyImplyLeading: false,
       ),
       body: Column(
@@ -312,7 +324,7 @@ void _disposeListeners() {
             ),
           ),
 
-          // 📋 Thông tin chuyến đi
+          // Thông tin chuyến đi
           Expanded(
             flex: 2,
             child: Container(
@@ -431,7 +443,9 @@ void _disposeListeners() {
                               ),
                             ),
                             child: Text(
-                              "Khách lên xe",
+                              isDriverAtPickup
+                                  ? "Khách lên xe (${countdown}s)"
+                                  : "Khách lên xe",
                               style: TextStyle(
                                   fontSize: 16, fontWeight: FontWeight.bold),
                             ),
