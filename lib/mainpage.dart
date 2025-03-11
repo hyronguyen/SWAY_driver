@@ -36,10 +36,10 @@ class _DriverMainpageState extends State<DriverMainpage> {
     getDriverInfo();
     _loadTrackingState();
   }
-  
 
 //////////////////////////// Functions ////////////////////////////////////////////
 
+  // KIỂM TRA CHỨC TRẠNG THÁI CHỨC NĂNG NHẬN CUỐC
   void _loadTrackingState() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     bool? savedTracking = prefs.getBool('isTracking');
@@ -53,6 +53,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
     }
   }
 
+  // BẬT CHỨC NĂNG NHẬN CUỐC
   void _toggleTracking() async {
     debugPrint("_toggleTracking: ⚡ Bắt đầu toggle tracking...");
 
@@ -116,7 +117,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
     }
   }
 
-  // Bắt đầu theo dõi vị trí
+  // THEO DÕI VỊ TRÍ TÀI XẾ
   void _startListeningLocation() {
     debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
 
@@ -191,7 +192,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
     });
   }
 
-  // Hàm lắng nghe yêu cầu nhận cuốc
+  // LẮNG NGHE YÊU CẦU CUỐC (RIDE_REQUESTS)
   void _listenForRideRequests() {
     debugPrint("🎧 Bắt đầu lắng nghe yêu cầu đặt xe...");
 
@@ -224,20 +225,42 @@ class _DriverMainpageState extends State<DriverMainpage> {
     });
   }
 
-  // Hàm show popup khi nhận cuốc
+  // POP UP CUỐC XE
   Future<void> _showRideRequestDialog(QueryDocumentSnapshot rideData) async {
     audioplayer.setVolume(1.0); // Đảm bảo âm lượng tối đa
     await audioplayer.play(AssetSource('audio/thongbao_cocuoc.mp3'));
-    
-     // Đợi 1-2 giây để âm thanh kịp phát trước khi mở Dialog
-   await Future.delayed(Duration(seconds: 2));
+
+    await Future.delayed(Duration(seconds: 2));
     Map<String, dynamic> rideInfo = rideData.data() as Map<String, dynamic>;
     double totalFare = (rideInfo['fare'] ?? 0) + (rideInfo['weather_fee'] ?? 0);
+     BuildContext dialogContext; 
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (BuildContext context) {
+      dialogContext = context; 
+
+        // Bắt đầu lắng nghe rideData.id để kiểm tra nếu bị xóa
+      FirebaseFirestore.instance
+          .collection("RIDE_REQUESTS")
+          .doc(rideData.id)
+          .snapshots()
+          .listen((snapshot) async {
+        if (!snapshot.exists) {
+          // Nếu tài liệu bị xóa, cập nhật AVAILABLE_DRIVERS về "available"
+          await FirebaseFirestore.instance
+              .collection("AVAILABLE_DRIVERS")
+              .doc(driverId)
+              .update({"status": "available"});
+
+          // Kiểm tra xem dialog có đang mở không, nếu có thì đóng
+          if (dialogContext != null) {
+            Navigator.of(dialogContext).pop();
+          }
+        }
+      });
+
         return AlertDialog(
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
