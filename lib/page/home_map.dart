@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -12,6 +13,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  String? driverId = "null";
   final MapController _mapController = MapController();
   final TextEditingController _addressController = TextEditingController();
   LatLng? _selectedLocation;
@@ -21,11 +23,24 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     Future.delayed(Duration.zero, () {
+      getDriverInfo();
       _getCurrentLocation();
     });
   }
 
 //////////////////////////// Functions ////////////////////////////////////////////
+
+Future<void> getDriverInfo() async {
+    try {
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      setState(() {
+        driverId = prefs.getString("driver_id") ?? "driver_id_test";
+       
+      });
+    } catch (e) {
+      debugPrint("Lỗi $e");
+    }
+  }
 
   // Hàm lấy chuyển latlng thành địa chỉ string
   Future<void> _getAddressFromLatLng(LatLng latLng) async {

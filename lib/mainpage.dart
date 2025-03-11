@@ -7,6 +7,8 @@ import 'package:sway_driver/page/default.dart';
 import 'package:sway_driver/page/home_map.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sway_driver/page/trip_tracking/picking_up.dart';
 
 class DriverMainpage extends StatefulWidget {
   const DriverMainpage({super.key});
@@ -30,12 +32,29 @@ class _DriverMainpageState extends State<DriverMainpage> {
   void initState() {
     super.initState();
     getDriverInfo();
+    _loadTrackingState();
   }
+  
 
 //////////////////////////// Functions ////////////////////////////////////////////
 
+  void _loadTrackingState() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    bool? savedTracking = prefs.getBool('isTracking');
+
+    if (savedTracking != null && savedTracking) {
+      setState(() {
+        isTracking = true;
+      });
+      _startListeningLocation(); // Tiếp tục theo dõi vị trí
+      _listenForRideRequests(); // Tiếp tục lắng nghe cuốc xe
+    }
+  }
+
   void _toggleTracking() async {
     debugPrint("_toggleTracking: ⚡ Bắt đầu toggle tracking...");
+
+    SharedPreferences prefs = await SharedPreferences.getInstance();
 
     if (!isTracking) {
       debugPrint("_toggleTracking: 📍 Kiểm tra quyền truy cập vị trí...");
@@ -47,7 +66,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
           debugPrint(
               "_toggleTracking: 🚫 Quyền truy cập vị trí bị từ chối vĩnh viễn!");
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text("Quyền truy cập vị trí bị từ chối!")),
+            const SnackBar(content: Text("Quyền truy cập vị trí bị từ chối!")),
           );
           return;
         }
@@ -59,10 +78,11 @@ class _DriverMainpageState extends State<DriverMainpage> {
         isTracking = true;
       });
 
+      // 🔥 Lưu trạng thái isTracking vào SharedPreferences
+      await prefs.setBool('isTracking', true);
+
       // 🔥 Bắt đầu theo dõi vị trí của tài xế
       _startListeningLocation();
-
-      // 🔥 Khi bật tracking, bắt đầu lắng nghe yêu cầu cuốc xe
       _listenForRideRequests();
     } else {
       debugPrint("🛑 Dừng theo dõi vị trí...");
@@ -70,6 +90,9 @@ class _DriverMainpageState extends State<DriverMainpage> {
       setState(() {
         isTracking = false;
       });
+
+      // 🔥 Lưu trạng thái isTracking vào SharedPreferences
+      await prefs.setBool('isTracking', false);
 
       positionSubscription?.cancel();
       positionSubscription = null;
@@ -85,7 +108,6 @@ class _DriverMainpageState extends State<DriverMainpage> {
       }
       debugPrint("🚫 Đã hủy lắng nghe vị trí.");
 
-      // 🔥 Khi tắt tracking, dừng lắng nghe yêu cầu cuốc xe
       rideRequestSubscription?.cancel();
       rideRequestSubscription = null;
       debugPrint("🚫 Đã hủy chế độ nhận cuốc.");
@@ -311,7 +333,8 @@ class _DriverMainpageState extends State<DriverMainpage> {
                             EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                       ),
                       child: Text("Nhận cuốc",
-                          style: TextStyle(fontSize: 16, color: backgroundblack)),
+                          style:
+                              TextStyle(fontSize: 16, color: backgroundblack)),
                     ),
                   ],
                 ),
@@ -383,6 +406,16 @@ class _DriverMainpageState extends State<DriverMainpage> {
             'tracking_status': 'pickingup', // Trạng thái mới của cuốc xe
             'timestamp': FieldValue.serverTimestamp(), // Ghi thời gian
           });
+
+          // Chuyển đến PickingUpPage và truyền dữ liệu trackingTrip
+          // Chuyển đến PickingUpPage chỉ với rideId
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => PickingUpPage(
+                  trackingTripId: rideId, driverID: driverId ?? ''),
+            ),
+          );
 
           debugPrint("📌 Đã tạo bản ghi TRACKING_TRIP thành công!");
         } else {
@@ -495,6 +528,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
               onPressed: _toggleTracking,
             ),
           ),
+
           SizedBox(width: 16),
           Container(
             height: 40,
@@ -663,7 +697,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
     );
   }
 
-// Widget ///////////////////////////////////////////////////////////////////////
+/////////////////////////////// Widget //////////////////////////////////////////
   // Widget hiển thị mỗi dòng thông tin
   Widget _buildInfoRow(String title, dynamic value) {
     return Padding(

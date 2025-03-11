@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sway_driver/mainpage.dart';
 import 'package:sway_driver/page/authen/login.dart';
 import 'package:firebase_core/firebase_core.dart';
 
@@ -12,7 +13,7 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
+  // This widget is the root of your application.ddddddddddddddddddddddd
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -21,7 +22,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: Colors.black,
         ),
-      home: DriverLoginScreen(),
+      home: DriverMainpage(),
     );
   }
 }

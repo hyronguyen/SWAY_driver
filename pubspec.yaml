@@ -43,6 +43,7 @@ dependencies:
   cloud_firestore:
   firebase_auth:
   shared_preferences: ^2.0.6
+  http:
 
   
 
