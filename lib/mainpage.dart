@@ -233,7 +233,11 @@ class _DriverMainpageState extends State<DriverMainpage> {
     await Future.delayed(Duration(seconds: 2));
     Map<String, dynamic> rideInfo = rideData.data() as Map<String, dynamic>;
     double totalFare = (rideInfo['fare'] ?? 0) + (rideInfo['weather_fee'] ?? 0);
-     BuildContext dialogContext; 
+    BuildContext dialogContext; 
+
+    LatLng pickupLocation = LatLng(rideInfo['pickup_location']['latitude'], rideInfo['pickup_location']['longitude']);
+    LatLng destinationLocation = LatLng(rideInfo['destination_location']['latitude'], rideInfo['destination_location']['longitude']);
+    
 
     showDialog(
       context: context,
@@ -255,7 +259,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
               .update({"status": "available"});
 
           // Kiểm tra xem dialog có đang mở không, nếu có thì đóng
-          if (dialogContext != null) {
+          if (dialogContext != null && mounted) {
             Navigator.of(dialogContext).pop();
           }
         }
@@ -341,7 +345,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
                   children: [
                     ElevatedButton(
                       onPressed: () {
-                        _processRequest(rideData.id, "denied");
+                        _processRequest(rideData.id, "denied",pickupLocation,destinationLocation);
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
@@ -354,7 +358,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
                     ),
                     ElevatedButton(
                       onPressed: () {
-                        _processRequest(rideData.id, "accepted");
+                        _processRequest(rideData.id, "accepted",pickupLocation,destinationLocation);
                         Navigator.of(context).pop();
                       },
                       style: ElevatedButton.styleFrom(
@@ -377,7 +381,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
   }
 
   // HÀM XỬ LÝ YÊU CẦU
-  void _processRequest(String rideId, String status) async {
+  void _processRequest(String rideId, String status, LatLng pickup_location,LatLng destination_location) async {
     try {
       if (status == 'denied') {
         // 🔴 Nếu tài xế từ chối cuốc xe
@@ -443,7 +447,10 @@ class _DriverMainpageState extends State<DriverMainpage> {
             context,
             MaterialPageRoute(
               builder: (context) => PickingUpPage(
-                  trackingTripId: rideId, driverID: driverId ?? ''),
+                  trackingTripId: rideId, 
+                  driverID: driverId ?? '',
+                  pickupLocation: pickup_location,
+                  destinationLocation: destination_location),
             ),
           );
 

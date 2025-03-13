@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sway_driver/config/icon.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -13,12 +14,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+//LOCAL VARIBLE ----------------------------------------------------------------------------------
   String? driverId = "null";
   final MapController _mapController = MapController();
   final TextEditingController _addressController = TextEditingController();
   LatLng? _selectedLocation;
 
-/////////////////////////// LIFEFE CYLE ///////////////////////////////////////////
+//LIFE CYCLE ----------------------------------------------------------------------------------
   @override
   void initState() {
     super.initState();
@@ -28,21 +30,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-//////////////////////////// Functions ////////////////////////////////////////////
+//FUNCTIONS ----------------------------------------------------------------------------------
 
-Future<void> getDriverInfo() async {
+  // LẤY THÔNG TIN TÀI XẾ TỪ SF
+  Future<void> getDriverInfo() async {
     try {
       SharedPreferences prefs = await SharedPreferences.getInstance();
       setState(() {
         driverId = prefs.getString("driver_id") ?? "driver_id_test";
-       
       });
     } catch (e) {
       debugPrint("Lỗi $e");
     }
   }
 
-  // Hàm lấy chuyển latlng thành địa chỉ string
+  // HÀM CHUYỂN LATLNG THÀNH ĐỊA CHỈ
   Future<void> _getAddressFromLatLng(LatLng latLng) async {
     try {
       List<Placemark> placemarks =
@@ -64,7 +66,7 @@ Future<void> getDriverInfo() async {
     }
   }
 
-  // Lấy vị trí hiện tại và cập nhật địa chỉ
+  // LẤY VỊ TRÍ HIỆN TẠI
   Future<void> _getCurrentLocation() async {
     try {
       _showLoadingDialog(context);
@@ -100,7 +102,7 @@ Future<void> getDriverInfo() async {
     });
   }
 
-  // Hàm hiển thị popup loading
+  // HIỆN THỊ POPUP
   void _showLoadingDialog(BuildContext context) {
     showDialog(
       context: context,
@@ -137,7 +139,7 @@ Future<void> getDriverInfo() async {
     Navigator.of(context).pop(); // Đóng popup
   }
 
-//Layout /////////////////////////////////////////////////////
+//Layout ----------------------------------------------------------------------------------
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -147,7 +149,7 @@ Future<void> getDriverInfo() async {
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(10.7769, 106.7009),
-              initialZoom: 13,
+              initialZoom: 16,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
               ),
@@ -162,10 +164,9 @@ Future<void> getDriverInfo() async {
                   markers: [
                     Marker(
                       point: _selectedLocation!,
-                      width: 30,
-                      height: 30,
-                      child: const Icon(Icons.location_history,
-                          color: Colors.amber, size: 50),
+                      width: 100,
+                      height: 100,
+                      child: point_icon,
                     ),
                   ],
                 ),

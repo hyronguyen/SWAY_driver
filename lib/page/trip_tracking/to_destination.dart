@@ -8,15 +8,17 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:sway_driver/config/colors.dart';
 import 'package:http/http.dart' as http;
+import 'package:sway_driver/config/icon.dart';
 import 'package:sway_driver/page/wallet/done.dart';
 
 class ToDestinationPage extends StatefulWidget {
   // ATTRIBUTES/////////////////////////////////////////////////////////////////////////////////////////////////////////
   final String trackingTripId;
   final String driverID;
+  final LatLng destinationLocation;
 
   const ToDestinationPage(
-      {Key? key, required this.trackingTripId, required this.driverID})
+      {Key? key, required this.trackingTripId, required this.driverID, required this.destinationLocation})
       : super(key: key);
 
   @override
@@ -28,8 +30,6 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   Map<String, dynamic>? trackingTripData;
   bool isLoading = true;
   LatLng? driverLocation;
-  LatLng? pickupLocation;
-  LatLng? destinationLocation;
   StreamSubscription<DocumentSnapshot>? driverLocationSubscription;
   List<LatLng> routePoints = [];
   final MapController _mapController = MapController();
@@ -44,8 +44,6 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   @override
   void initState() {
     super.initState();
-    fetchTripData();
-
     _fetchTrackingTrip();
     _listenToDriverLocation();
   }
@@ -57,35 +55,6 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   }
 
 // FUNCTION/////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-  // Lấy điểm đến và điểm đón
-  void fetchTripData() async {
-    try {
-      DocumentSnapshot tripSnapshot = await FirebaseFirestore.instance
-          .collection('TRACKING_TRIP')
-          .doc('trackingTripId') // Thay thế bằng ID thực tế
-          .get();
-
-      if (tripSnapshot.exists) {
-        var data = tripSnapshot.data() as Map<String, dynamic>;
-
-        setState(() {
-          pickupLocation = LatLng(
-            double.parse(data['pickup_location']['latitude'].toString()),
-            double.parse(data['pickup_location']['longitude'].toString()),
-          );
-
-          destinationLocation = LatLng(
-            double.parse(data['destination_location']['latitude'].toString()),
-            double.parse(data['destination_location']['longitude'].toString()),
-          );
-        });
-      }
-      debugPrint("$pickupLocation + $destinationLocation");
-    } catch (error) {
-      debugPrint('Lỗi khi lấy dữ liệu: $error');
-    }
-  }
 
   // Vẽ đường
   void _drawRoute() async {
@@ -289,7 +258,7 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
               mapController: _mapController,
               options: MapOptions(
                 initialCenter: const LatLng(10.7769, 106.7009),
-                initialZoom: 13,
+                initialZoom: 16,
                 interactionOptions: const InteractionOptions(
                   flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
                 ),
@@ -304,10 +273,15 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
                     markers: [
                       Marker(
                         point: driverLocation!,
-                        width: 30,
-                        height: 30,
-                        child: const Icon(Icons.local_taxi,
-                            color: primary, size: 50),
+                        width: 50,
+                        height: 50,
+                        child: point_icon,
+                      ),
+                      Marker(
+                        point: widget.destinationLocation,
+                        width: 50,
+                        height: 50,
+                        child: des_icon,
                       ),
                     ],
                   ),
@@ -316,7 +290,7 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
                     polylines: [
                       Polyline(
                         points: routePoints,
-                        color: myorange,
+                        color: path,
                         strokeWidth: 5.0,
                       ),
                     ],
