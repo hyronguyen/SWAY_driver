@@ -28,6 +28,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
   StreamSubscription<QuerySnapshot>? rideRequestSubscription;
   int _selectedIndex = 0;
   AudioPlayer audioplayer = AudioPlayer();
+  LatLng? lastPosition;
 
 ///////////////////////////// Life Cycle /////////////////////////////////////////////
   @override
@@ -117,59 +118,56 @@ class _DriverMainpageState extends State<DriverMainpage> {
     }
   }
 
-  // THEO DÕI VỊ TRÍ TÀI XẾ
-  void _startListeningLocation() {
-    debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
 
-    positionSubscription = Geolocator.getPositionStream(
-      locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
-    ).listen((Position position) async {
-      LatLng latLng = LatLng(position.latitude, position.longitude);
-      debugPrint("📌 Nhận vị trí mới: ${latLng}");
+void _startListeningLocation() {
+  debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
 
-      try {
-        DocumentSnapshot driverDoc = await FirebaseFirestore.instance
-            .collection('AVAILABLE_DRIVERS')
-            .doc(driverId)
-            .get();
+  positionSubscription = Geolocator.getPositionStream(
+    locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
+  ).listen((Position position) async {
+    LatLng latLng = LatLng(position.latitude, position.longitude);
+    
+    // Kiểm tra nếu vị trí không thay đổi đáng kể thì bỏ qua
+    if (lastPosition != null) {
+      double distance = Geolocator.distanceBetween(
+        lastPosition!.latitude, lastPosition!.longitude,
+        latLng.latitude, latLng.longitude,
+      );
 
-        if (driverDoc.exists) {
-          Map<String, dynamic>? driverData =
-              driverDoc.data() as Map<String, dynamic>?;
+      if (distance < 10) { // Chỉ cập nhật nếu di chuyển ít nhất 10m
+        debugPrint("🔹 Vị trí thay đổi không đáng kể (${distance.toStringAsFixed(2)}m), bỏ qua cập nhật.");
+        return;
+      }
+    }
 
-          if (driverData != null &&
-              (driverData['status'] == "pending" ||
-                  driverData['status'] == "serving")) {
-            // Nếu tài xế đang có trạng thái "pending" hoặc "serving", chỉ cập nhật vị trí và thông tin khác
-            await FirebaseFirestore.instance
-                .collection('AVAILABLE_DRIVERS')
-                .doc(driverId)
-                .set({
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'timestamp': FieldValue.serverTimestamp(),
-              'vehicle': driverVehicle,
-            }, SetOptions(merge: true));
+    debugPrint("📌 Nhận vị trí mới: ${latLng}");
 
-            debugPrint(
-                "✅ Cập nhật vị trí thành công, giữ nguyên trạng thái '${driverData['status']}'!");
-          } else {
-            // Nếu trạng thái không phải "pending" hoặc "serving", cập nhật toàn bộ
-            await FirebaseFirestore.instance
-                .collection('AVAILABLE_DRIVERS')
-                .doc(driverId)
-                .set({
-              'latitude': position.latitude,
-              'longitude': position.longitude,
-              'status': "available",
-              'timestamp': FieldValue.serverTimestamp(),
-              'vehicle': driverVehicle,
-            }, SetOptions(merge: true));
+    try {
+      DocumentSnapshot driverDoc = await FirebaseFirestore.instance
+          .collection('AVAILABLE_DRIVERS')
+          .doc(driverId)
+          .get();
 
-            debugPrint("✅ Cập nhật Firestore thành công!");
-          }
+      if (driverDoc.exists) {
+        Map<String, dynamic>? driverData =
+            driverDoc.data() as Map<String, dynamic>?;
+
+        if (driverData != null &&
+            (driverData['status'] == "pending" ||
+                driverData['status'] == "serving")) {
+          await FirebaseFirestore.instance
+              .collection('AVAILABLE_DRIVERS')
+              .doc(driverId)
+              .set({
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'timestamp': FieldValue.serverTimestamp(),
+            'vehicle': driverVehicle,
+          }, SetOptions(merge: true));
+
+          debugPrint(
+              "✅ Cập nhật vị trí thành công, giữ nguyên trạng thái '${driverData['status']}'!");
         } else {
-          // Nếu tài xế chưa tồn tại trong Firestore, tạo mới với trạng thái "available"
           await FirebaseFirestore.instance
               .collection('AVAILABLE_DRIVERS')
               .doc(driverId)
@@ -179,18 +177,36 @@ class _DriverMainpageState extends State<DriverMainpage> {
             'status': "available",
             'timestamp': FieldValue.serverTimestamp(),
             'vehicle': driverVehicle,
-          });
+          }, SetOptions(merge: true));
 
-          debugPrint(
-              "✅ Tài xế chưa tồn tại, đã thêm mới với trạng thái 'available'!");
+          debugPrint("✅ Cập nhật Firestore thành công!");
         }
-      } catch (e) {
-        debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+      } else {
+        await FirebaseFirestore.instance
+            .collection('AVAILABLE_DRIVERS')
+            .doc(driverId)
+            .set({
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'status': "available",
+          'timestamp': FieldValue.serverTimestamp(),
+          'vehicle': driverVehicle,
+        });
+
+        debugPrint(
+            "✅ Tài xế chưa tồn tại, đã thêm mới với trạng thái 'available'!");
       }
-    }, onError: (error) {
-      debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
-    });
-  }
+
+      // Cập nhật lastPosition sau khi Firestore đã được cập nhật
+      lastPosition = latLng;
+      
+    } catch (e) {
+      debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+    }
+  }, onError: (error) {
+    debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
+  });
+}
 
   // LẮNG NGHE YÊU CẦU CUỐC (RIDE_REQUESTS)
   void _listenForRideRequests() {
