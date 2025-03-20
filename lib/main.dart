@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:sway_driver/mainpage.dart';
 import 'package:sway_driver/page/authen/login.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:sway_driver/testscreen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -22,7 +23,7 @@ class MyApp extends StatelessWidget {
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: Colors.black,
         ),
-      home: DriverMainpage(),
+      home: TestScreen(),
     );
   }
 }

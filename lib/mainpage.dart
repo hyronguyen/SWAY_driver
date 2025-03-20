@@ -516,8 +516,15 @@ Future<void> _updateDriverLocation(LatLng latLng, bool isInitialUpdate) async {
         driverVehicle = prefs.getString("driver_vehicle") ?? "xemay";
       });
 
-      debugPrint("🚗 Driver ID: $driverId");
-      debugPrint("🛵 Vehicle Type: $driverVehicle");
+      if (driverId == "driver_id_test") {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Bạn đang ở chế độ test với ID tài xế: driver_id_test"),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
+
     } catch (e) {
       debugPrint("Lỗi $e");
     }
