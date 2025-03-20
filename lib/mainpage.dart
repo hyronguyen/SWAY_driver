@@ -516,14 +516,15 @@ Future<void> _updateDriverLocation(LatLng latLng, bool isInitialUpdate) async {
         driverVehicle = prefs.getString("driver_vehicle") ?? "xemay";
       });
 
-      if (driverId == "driver_id_test") {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Bạn đang ở chế độ test với ID tài xế: driver_id_test"),
-          duration: Duration(seconds: 1),
-        ),
-      );
-    }
+      if (driverId == "driver_id_test" || driverId == "driver_id_test2" || driverId == "driver_id_test3") {
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text("Bạn đang ở chế độ test với ID tài xế: $driverId"),
+      duration: Duration(seconds: 1),
+    ),
+  );
+}
+
 
     } catch (e) {
       debugPrint("Lỗi $e");
