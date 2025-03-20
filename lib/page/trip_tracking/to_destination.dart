@@ -115,12 +115,35 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
   }
 
   // Theo dõi vị trí tài xế
-  void _listenToDriverLocation() {
+  void _listenToDriverLocation() async {
+  try {
+    // Lấy dữ liệu tài xế ban đầu
+    var docSnapshot = await FirebaseFirestore.instance
+        .collection('AVAILABLE_DRIVERS')
+        .doc(widget.driverID)
+        .get();
+
+    if (docSnapshot.exists) {
+      var data = docSnapshot.data();
+      if (data != null &&
+          data['latitude'] != null &&
+          data['longitude'] != null) {
+        LatLng initialLocation = LatLng(data['latitude'], data['longitude']);
+
+        setState(() {
+          driverLocation = initialLocation;
+        });
+
+        _drawRoute(); // Gọi vẽ đường ngay sau khi có vị trí ban đầu
+      }
+    }
+
+    // Lắng nghe vị trí tài xế theo thời gian thực
     driverLocationSubscription = FirebaseFirestore.instance
         .collection('AVAILABLE_DRIVERS')
         .doc(widget.driverID)
         .snapshots()
-        .listen((snapshot) async {
+        .listen((snapshot) {
       if (snapshot.exists) {
         var data = snapshot.data();
         if (data != null &&
@@ -133,14 +156,17 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
           });
 
           Move(newLocation);
-          _drawRoute(); // Gọi hàm vẽ đường
+          _drawRoute(); // Cập nhật lại đường khi tài xế di chuyển
 
-          // Kiểm tra tài xế có đến gần điểm đón không
           Future.delayed(Duration(seconds: 1), _checkDriverProximity);
         }
       }
     });
+  } catch (e) {
+    debugPrint("❌ Lỗi khi lấy vị trí tài xế: $e");
   }
+}
+
 
 // Kiểm tra tài xế có trong bán kính 20m của điểm đón không
   void _checkDriverProximity() {
@@ -163,7 +189,7 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
 
     debugPrint("📏 Khoảng cách đến điểm đến: ${distance.toStringAsFixed(2)}m");
 
-    if (distance <= 70 && !isDriverAtDes) {
+    if (distance <= 200 && !isDriverAtDes) {
       debugPrint("🚖 Tài xế đã đến điểm điến!");
       setState(() {
         isDriverAtDes = true;
@@ -268,7 +294,19 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
                   urlTemplate:
                       'https://api.mapbox.com/styles/v1/hothanhgiang9/cm6n57t2u007201sg15ac9swb/tiles/256/{z}/{x}/{y}@2x?access_token=$mapBoxToken',
                 ),
-                if (driverLocation != null)
+                
+                if (routePoints.isNotEmpty)
+                  PolylineLayer(
+                    polylines: [
+                      Polyline(
+                        points: routePoints,
+                        color: path,
+                        strokeWidth: 5.0,
+                      ),
+                    ],
+                  ),
+
+                  if (driverLocation != null)
                   MarkerLayer(
                     markers: [
                       Marker(
@@ -282,16 +320,6 @@ class _ToDestinationPageState extends State<ToDestinationPage> {
                         width: 50,
                         height: 50,
                         child: des_icon,
-                      ),
-                    ],
-                  ),
-                if (routePoints.isNotEmpty)
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: routePoints,
-                        color: path,
-                        strokeWidth: 5.0,
                       ),
                     ],
                   ),

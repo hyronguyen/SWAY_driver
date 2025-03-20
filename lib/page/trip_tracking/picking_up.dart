@@ -19,7 +19,11 @@ class PickingUpPage extends StatefulWidget {
   final LatLng destinationLocation;
 
   const PickingUpPage(
-      {Key? key, required this.trackingTripId, required this.driverID, required this.pickupLocation, required this.destinationLocation})
+      {Key? key,
+      required this.trackingTripId,
+      required this.driverID,
+      required this.pickupLocation,
+      required this.destinationLocation})
       : super(key: key);
 
   @override
@@ -116,31 +120,56 @@ class _PickingUpPageState extends State<PickingUpPage> {
   }
 
   // Theo dõi vị trí tài xế
-  void _listenToDriverLocation() {
-    driverLocationSubscription = FirebaseFirestore.instance
-        .collection('AVAILABLE_DRIVERS')
-        .doc(widget.driverID)
-        .snapshots()
-        .listen((snapshot) async {
-      if (snapshot.exists) {
-        var data = snapshot.data();
+  void _listenToDriverLocation() async {
+    try {
+      // Lấy dữ liệu tài xế ban đầu
+      var docSnapshot = await FirebaseFirestore.instance
+          .collection('AVAILABLE_DRIVERS')
+          .doc(widget.driverID)
+          .get();
+
+      if (docSnapshot.exists) {
+        var data = docSnapshot.data();
         if (data != null &&
             data['latitude'] != null &&
             data['longitude'] != null) {
-          LatLng newLocation = LatLng(data['latitude'], data['longitude']);
+          LatLng initialLocation = LatLng(data['latitude'], data['longitude']);
 
           setState(() {
-            driverLocation = newLocation;
+            driverLocation = initialLocation;
           });
 
-          Move(newLocation);
-          _drawRoute(); // Gọi hàm vẽ đường
-
-          // Kiểm tra tài xế có đến gần điểm đón không
-          Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+          _drawRoute(); // Gọi vẽ đường ngay sau khi có vị trí ban đầu
         }
       }
-    });
+
+      // Lắng nghe sự thay đổi vị trí tài xế theo thời gian thực
+      driverLocationSubscription = FirebaseFirestore.instance
+          .collection('AVAILABLE_DRIVERS')
+          .doc(widget.driverID)
+          .snapshots()
+          .listen((snapshot) {
+        if (snapshot.exists) {
+          var data = snapshot.data();
+          if (data != null &&
+              data['latitude'] != null &&
+              data['longitude'] != null) {
+            LatLng newLocation = LatLng(data['latitude'], data['longitude']);
+
+            setState(() {
+              driverLocation = newLocation;
+            });
+
+            Move(newLocation);
+            _drawRoute(); // Cập nhật lại đường khi tài xế di chuyển
+
+            Future.delayed(Duration(seconds: 1), _checkDriverProximity);
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint("❌ Lỗi khi lấy vị trí tài xế: $e");
+    }
   }
 
 // Kiểm tra tài xế có trong bán kính 20m của điểm đón không
@@ -163,7 +192,7 @@ class _PickingUpPageState extends State<PickingUpPage> {
 
     debugPrint("📏 Khoảng cách đến điểm đón: ${distance.toStringAsFixed(2)}m");
 
-    if (distance <= 50 && !isDriverAtPickup) {
+    if (distance <= 200 && !isDriverAtPickup) {
       debugPrint("🚖 Tài xế đã đến điểm đón!");
 
       setState(() {
@@ -214,10 +243,9 @@ class _PickingUpPageState extends State<PickingUpPage> {
       context,
       MaterialPageRoute(
         builder: (context) => ToDestinationPage(
-          trackingTripId: widget.trackingTripId,
-          driverID: widget.driverID ?? '',
-          destinationLocation: widget.destinationLocation
-        ),
+            trackingTripId: widget.trackingTripId,
+            driverID: widget.driverID ?? '',
+            destinationLocation: widget.destinationLocation),
       ),
     );
 
@@ -278,13 +306,11 @@ class _PickingUpPageState extends State<PickingUpPage> {
                         height: 50,
                         child: point_icon,
                       ),
-
                       Marker(
-                        point: widget.pickupLocation,
-                        width: 50,
-                        height: 50,
-                        child: man_icon
-                      ), 
+                          point: widget.pickupLocation,
+                          width: 50,
+                          height: 50,
+                          child: man_icon),
                     ],
                   ),
                 if (routePoints.isNotEmpty)
