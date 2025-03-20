@@ -23,7 +23,7 @@ class _DriverMainpageState extends State<DriverMainpage> {
 
   bool isTracking = false; // Trạng thái theo dõi vị trí
   String? driverId = "null";
-  String? driverVehicle = "null"; // ID tài xế (Lấy từ Drawer)
+  String? driverVehicle = "null";
   StreamSubscription<Position>? positionSubscription; // Quản lý stream vị trí
   StreamSubscription<QuerySnapshot>? rideRequestSubscription;
   int _selectedIndex = 0;
@@ -118,94 +118,111 @@ class _DriverMainpageState extends State<DriverMainpage> {
     }
   }
 
-
-void _startListeningLocation() {
+void _startListeningLocation() async {
   debugPrint("⏳ Bắt đầu nhận vị trí từ Geolocator...");
 
-  positionSubscription = Geolocator.getPositionStream(
-    locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
-  ).listen((Position position) async {
-    LatLng latLng = LatLng(position.latitude, position.longitude);
-    
-    // Kiểm tra nếu vị trí không thay đổi đáng kể thì bỏ qua
-    if (lastPosition != null) {
-      double distance = Geolocator.distanceBetween(
-        lastPosition!.latitude, lastPosition!.longitude,
-        latLng.latitude, latLng.longitude,
-      );
+  try {
+    // Lấy vị trí hiện tại ngay khi hàm được gọi
+    Position currentPosition = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+    LatLng initialLatLng = LatLng(currentPosition.latitude, currentPosition.longitude);
 
-      if (distance < 10) { // Chỉ cập nhật nếu di chuyển ít nhất 10m
-        debugPrint("🔹 Vị trí thay đổi không đáng kể (${distance.toStringAsFixed(2)}m), bỏ qua cập nhật.");
-        return;
-      }
-    }
+    // Cập nhật lên Firestore ngay lập tức
+    await _updateDriverLocation(initialLatLng, true);
 
-    debugPrint("📌 Nhận vị trí mới: ${latLng}");
+    // Sau khi cập nhật vị trí ban đầu, bắt đầu lắng nghe vị trí mới
+    positionSubscription = Geolocator.getPositionStream(
+      locationSettings: LocationSettings(accuracy: LocationAccuracy.high),
+    ).listen((Position position) async {
+      LatLng latLng = LatLng(position.latitude, position.longitude);
 
-    try {
-      DocumentSnapshot driverDoc = await FirebaseFirestore.instance
-          .collection('AVAILABLE_DRIVERS')
-          .doc(driverId)
-          .get();
+      // Kiểm tra nếu vị trí không thay đổi đáng kể thì bỏ qua
+      if (lastPosition != null) {
+        double distance = Geolocator.distanceBetween(
+          lastPosition!.latitude, lastPosition!.longitude,
+          latLng.latitude, latLng.longitude,
+        );
 
-      if (driverDoc.exists) {
-        Map<String, dynamic>? driverData =
-            driverDoc.data() as Map<String, dynamic>?;
-
-        if (driverData != null &&
-            (driverData['status'] == "pending" ||
-                driverData['status'] == "serving")) {
-          await FirebaseFirestore.instance
-              .collection('AVAILABLE_DRIVERS')
-              .doc(driverId)
-              .set({
-            'latitude': position.latitude,
-            'longitude': position.longitude,
-            'timestamp': FieldValue.serverTimestamp(),
-            'vehicle': driverVehicle,
-          }, SetOptions(merge: true));
-
-          debugPrint(
-              "✅ Cập nhật vị trí thành công, giữ nguyên trạng thái '${driverData['status']}'!");
-        } else {
-          await FirebaseFirestore.instance
-              .collection('AVAILABLE_DRIVERS')
-              .doc(driverId)
-              .set({
-            'latitude': position.latitude,
-            'longitude': position.longitude,
-            'status': "available",
-            'timestamp': FieldValue.serverTimestamp(),
-            'vehicle': driverVehicle,
-          }, SetOptions(merge: true));
-
-          debugPrint("✅ Cập nhật Firestore thành công!");
+        if (distance < 10) {
+          debugPrint("🔹 Vị trí thay đổi không đáng kể (${distance.toStringAsFixed(2)}m), bỏ qua cập nhật.");
+          return;
         }
+      }
+
+      debugPrint("📌 Nhận vị trí mới: $latLng");
+
+      await _updateDriverLocation(latLng, false);
+    }, onError: (error) {
+      debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
+    });
+
+  } catch (e) {
+    debugPrint("🔥 Lỗi khi lấy vị trí ban đầu: $e");
+  }
+}
+
+// Hàm cập nhật vị trí lên Firestore
+Future<void> _updateDriverLocation(LatLng latLng, bool isInitialUpdate) async {
+  try {
+    DocumentSnapshot driverDoc = await FirebaseFirestore.instance
+        .collection('AVAILABLE_DRIVERS')
+        .doc(driverId)
+        .get();
+
+    if (driverDoc.exists) {
+      Map<String, dynamic>? driverData = driverDoc.data() as Map<String, dynamic>?;
+
+      if (driverData != null && (driverData['status'] == "pending" || driverData['status'] == "serving")) {
+        await FirebaseFirestore.instance
+            .collection('AVAILABLE_DRIVERS')
+            .doc(driverId)
+            .set({
+          'latitude': latLng.latitude,
+          'longitude': latLng.longitude,
+          'timestamp': FieldValue.serverTimestamp(),
+          'vehicle': driverVehicle,
+        }, SetOptions(merge: true));
+
+        debugPrint("✅ Cập nhật vị trí thành công, giữ nguyên trạng thái '${driverData['status']}'!");
       } else {
         await FirebaseFirestore.instance
             .collection('AVAILABLE_DRIVERS')
             .doc(driverId)
             .set({
-          'latitude': position.latitude,
-          'longitude': position.longitude,
+          'latitude': latLng.latitude,
+          'longitude': latLng.longitude,
           'status': "available",
           'timestamp': FieldValue.serverTimestamp(),
           'vehicle': driverVehicle,
-        });
+        }, SetOptions(merge: true));
 
-        debugPrint(
-            "✅ Tài xế chưa tồn tại, đã thêm mới với trạng thái 'available'!");
+        debugPrint("✅ Cập nhật Firestore thành công!");
       }
+    } else {
+      await FirebaseFirestore.instance
+          .collection('AVAILABLE_DRIVERS')
+          .doc(driverId)
+          .set({
+        'latitude': latLng.latitude,
+        'longitude': latLng.longitude,
+        'status': "available",
+        'timestamp': FieldValue.serverTimestamp(),
+        'vehicle': driverVehicle,
+      });
 
-      // Cập nhật lastPosition sau khi Firestore đã được cập nhật
-      lastPosition = latLng;
-      
-    } catch (e) {
-      debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+      debugPrint("✅ Tài xế chưa tồn tại, đã thêm mới với trạng thái 'available'!");
     }
-  }, onError: (error) {
-    debugPrint("⚠️ Lỗi khi lắng nghe vị trí: $error");
-  });
+
+    // Cập nhật lastPosition sau khi Firestore đã được cập nhật
+    lastPosition = latLng;
+
+    if (isInitialUpdate) {
+      debugPrint("🚀 Vị trí ban đầu đã được cập nhật!");
+    }
+  } catch (e) {
+    debugPrint("🔥 Lỗi khi cập nhật Firestore: $e");
+  }
 }
 
   // LẮNG NGHE YÊU CẦU CUỐC (RIDE_REQUESTS)

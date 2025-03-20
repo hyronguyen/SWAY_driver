@@ -67,6 +67,7 @@ class _DonePageState extends State<DonePage> {
         'status': 'available',
       });
 
+
       // Xóa chuyến đi khỏi RIDE_REQUESTS
       await firestore.collection('RIDE_REQUESTS').doc(widget.tripId).delete();
 
