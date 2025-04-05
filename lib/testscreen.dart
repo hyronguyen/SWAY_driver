@@ -11,7 +11,7 @@ class TestScreen extends StatefulWidget {
 
 class _TestScreenState extends State<TestScreen> {
   String selectedVehicle = 'xemay';
-  String selectedDriverId = 'driver_id_test';
+  String selectedDriverId = '1';
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +49,7 @@ class _TestScreenState extends State<TestScreen> {
             _buildDropdown(
               label: "Chọn ID tài xế",
               value: selectedDriverId,
-              items: ['driver_id_test', 'driver_id_test2', 'driver_id_test3'],
+              items: ['1', '2', '3'],
               onChanged: (value) {
                 setState(() {
                   selectedDriverId = value!;
